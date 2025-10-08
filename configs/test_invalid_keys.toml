@@ -1,0 +1,16 @@
+# Test config with invalid key names
+
+[settings]
+default_profile = "base"
+
+[[profiles]]
+name = "base"
+description = "Base profile with invalid keys"
+
+[[profiles.buttons.A]]
+type = "keyhold"
+key = "invalid_key_that_doesnt_exist"
+
+[[profiles.buttons.B]]
+type = "keyhold"
+key = "another_bad_key"

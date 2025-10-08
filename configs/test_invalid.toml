@@ -1,0 +1,27 @@
+# Test config with validation errors
+
+[settings]
+default_profile = "base"
+sensitivity_factor = [1.0, 2.0, 3.0]
+
+# Profile 1: Has CycleProfiles on SLR
+[[profiles]]
+name = "base"
+description = "Base profile"
+
+[[profiles.buttons.SLR]]
+type = "cycleprofiles"
+
+[[profiles.buttons.A]]
+type = "keyhold"
+key = "w"
+
+# Profile 2: MISSING CycleProfiles - should fail validation!
+[[profiles]]
+name = "game"
+description = "Game profile without cycle button"
+
+[[profiles.buttons.A]]
+type = "keyhold"
+key = "space"
+# Note: Missing SLR cycleprofiles action!

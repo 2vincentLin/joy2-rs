@@ -1,0 +1,4 @@
+/target
+/docs
+*.exe
+joycon_cache.json

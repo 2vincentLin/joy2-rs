@@ -1,0 +1,165 @@
+# Joy-Con 2 Advanced Mapping Configuration with profiles
+
+[settings]
+left_stick_deadzone = 0.15
+right_stick_deadzone = 0.20
+vibration_enabled = true
+default_profile = "base"
+sensitivity_factor = [1.0, 2.0, 3.0]
+
+# type
+#   - "keyhold": Hold key while button is held
+#   - "mousemove": Move mouse relatively
+#   - "mouseclick": Click mouse button
+#   - "cycleprofiles": Cycle to next profiles
+#   - "cyclesensitivity": Cycle through sensitivity factor levels
+#   - "togglegyromouser": Toggle gyro mouse mode (right stick + gyro as mouse)
+#   - "togglegyromousel": Toggle gyro mouse mode (left stick + gyro as mouse)
+#   - "none": No action )
+
+# note
+#   - use "numpadadd" for "+" key, the + symbol here is reserved for multiple keys
+
+# =============================================================================
+# PROFILES
+# =============================================================================
+
+[[profiles]]
+name = "ETS2"
+description = "euro truck simulator 2"
+
+[profiles.buttons]
+A = [{ type = "keyhold", key = "enter" }] # confirm
+B = [{ type = "none", key = "" }]
+X = [{ type = "keyhold", key = "t" }] # connect/disconnect trailer
+Y = [{ type = "none", key = "" }]
+
+L = [{ type = "keyhold", key = "[" }] # left indicator
+R =  [{ type = "keyhold", key = "]" }] # right indicator
+ZL = [{ type = "keyhold", key = "s" }] # brake
+ZR = [{ type = "keyhold", key = "w" }] # accelerate
+
+DpadUp = [{ type = "keyhold", key = "9" }] # next camera
+DpadDown = [{ type = "keyhold", key = "m" }] # world map
+DpadLeft = [{ type = "keyhold", key = "l" }] # lights
+DpadRight = [{ type = "keyhold", key = "p" }] # wipers
+
+Plus = [{ type = "cyclesensitivity"}]
+Minus = [{ type = "none", key = "" }]
+Home = [{ type = "keyhold", key = "escape" }] # menu
+Capture = [{ type = "keyhold", key = "f1" }] # enter mouse mode
+
+LeftStickClick = [{ type = "keyhold", key = "h" }] # horn
+RightStickClick = [{ type = "keyhold", key = "e" }] # start/turn off engine
+
+SLL = [{ type = "keyhold", key = "1" }]
+SRL = [{ type = "keyhold", key = "2" }]
+SLR = [{ type = "cycleprofiles"}]
+SRR = [{ type = "togglegyromouser"}]
+
+Chat = [{ type = "none", key = "" }]
+
+[profiles.sticks.left]
+mode = "directional"
+sensitivity = 1.0
+[profiles.sticks.left.directions]
+up = "w"
+down = "s"
+left = "a"
+right = "d"
+
+[profiles.sticks.right]
+mode = "mouse"
+sensitivity = 1.0
+
+[profiles.gyro.left]
+enabled = false
+output = "mouse"
+sensitivity_x = 1.0
+sensitivity_y = 1.0
+invert_x = false
+invert_y = false
+
+[profiles.gyro.right]
+enabled = true  # Always enabled for profiles, but only active when toggled
+output = "mouse"
+sensitivity_x = 1.0
+sensitivity_y = 1.0
+invert_x = false
+invert_y = false
+
+# Button overrides when gyro mouse is active
+[profiles.gyro_mouse_overrides_right]
+R = [{ type = "mouseclick", button = "left" }]
+ZR = [{ type = "mouseclick", button = "right" }]
+
+# =============================================================================
+
+[[profiles]]
+name = "base"
+description = "do nothing"
+
+[profiles.buttons]
+A = [{ type = "keyhold", key = "a" }]
+B = [{ type = "keyhold", key = "b" }]
+X = [{ type = "keyhold", key = "x" }]
+Y = [{ type = "keyhold", key = "y" }]
+
+L = [{ type = "keyhold", key = "l" }]
+R = [{ type = "keyhold", key = "r" }]
+ZL = [{ type = "keyhold", key = "" }]
+ZR = [{ type = "keyhold", key = "" }]
+
+DpadUp = [{ type = "keyhold", key = "up" }]
+DpadDown = [{ type = "keyhold", key = "down" }]
+DpadLeft = [{ type = "keyhold", key = "left" }]
+DpadRight = [{ type = "keyhold", key = "right" }]
+
+Plus = [{ type = "cyclesensitivity" }]
+Minus = [{ type = "keyhold", key = "-" }]
+Home = [{ type = "keyhold", key = "h" }]
+Capture = [{ type = "keyhold", key = "c" }]
+
+LeftStickClick = [{ type = "keyhold", key = "" }]
+RightStickClick = [{ type = "keyhold", key = "" }]
+
+SLL = [{ type = "keyhold", key = "" }]
+SRL = [{ type = "keyhold", key = "" }]
+SLR = [{ type = "cycleprofiles"}]
+SRR = [{ type = "togglegyromouser"}]
+
+Chat = [{ type = "keyhold", key = "" }]  
+
+[profiles.sticks.left]
+mode = "directional"
+sensitivity = 1.0
+[profiles.sticks.left.directions]
+up = "shift+w" # to test multiple keys
+down = "s"
+left = "a"
+right = "d"
+
+[profiles.sticks.right]
+mode = "mouse"
+sensitivity = 1.0
+
+[profiles.gyro.left]
+enabled = false
+output = "mouse"
+sensitivity_x = 1.0
+sensitivity_y = 1.0
+invert_x = false
+invert_y = false
+
+[profiles.gyro.right]
+enabled = false
+output = "mouse"
+sensitivity_x = 1.0
+sensitivity_y = 1.0
+invert_x = false
+invert_y = false
+
+# Button overrides when gyro mouse is active
+[profiles.gyro_mouse_overrides_right]
+R = [{ type = "mouseclick", button = "left" }]
+ZR = [{ type = "mouseclick", button = "right" }]
