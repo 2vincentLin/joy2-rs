@@ -15,7 +15,12 @@ use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Initialize logging
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
+    env_logger::Builder::from_env(env_logger::Env::default())
+        .filter_level(log::LevelFilter::Warn)                  // default
+        .filter_module("joy2_rs", log::LevelFilter::Info)
+        // .filter_module("joy2_rs::mapping::executor", log::LevelFilter::Trace)
+        .filter_module("btleplug", log::LevelFilter::Warn)
+        .init();
 
     println!("=== Joy-Con 2 Manager ===");
     println!();

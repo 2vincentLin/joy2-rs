@@ -6,14 +6,89 @@
 
 use crate::backend::{KeyboardBackend, MouseBackend, MouseButton};
 use crate::mapping::config::{Action, Config, StickMode, ButtonType, StickType, JoyConState, JoyConEvent, ControllerSide};
-use log::{debug, info, warn};
-use std::collections::HashSet;
+use log::{debug, info, warn, trace};
+use std::collections::{HashSet, HashMap};
 
-/// Tracks which keys/buttons are currently held
+/// Reference counts of sources keeping a key logically held
+#[derive(Default, Debug, Clone, Copy)]
+struct SourceCounts {
+    button: u32,
+    stick: u32,
+}
+
+impl SourceCounts {
+    fn total(&self) -> u32 { self.button + self.stick }
+    fn is_empty(&self) -> bool { self.total() == 0 }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum KeySource { Button, Stick }
+
+/// Tracks which keys/buttons are currently held (logical and physical)
 #[derive(Default)]
 struct HeldState {
-    keys: HashSet<String>,
+    /// Joy-Con buttons currently physically pressed (for deduping press events)
     buttons: HashSet<ButtonType>,
+    /// Per-key logical source counts
+    key_sources: HashMap<String, SourceCounts>,
+    /// Keys we have actually sent key_down for (OS state)
+    keys_down: HashSet<String>,
+}
+
+impl HeldState {
+    /// Press a key (from a specific source), this method will track sources and only send key_down when first claimed
+    fn press_key<Kb: KeyboardBackend>(&mut self, key: &str, source: KeySource, keyboard: &Kb) {
+        if key.is_empty() { return; }
+        let entry = self.key_sources.entry(key.to_string()).or_insert_with(SourceCounts::default);
+        let before = entry.total();
+        match source {
+            KeySource::Button => {
+                // Allow multiple different buttons to contribute (refcount)
+                entry.button = entry.button.saturating_add(1);
+            }
+            KeySource::Stick => {
+                // Stick is a single logical claimant per direction; make idempotent
+                if entry.stick > 0 { return; }
+                entry.stick = 1;
+            }
+        };
+        if before == 0 {
+            // First claimant -> send key_down
+            if let Err(e) = keyboard.key_down(key) { warn!("Failed to press key '{}': {}", key, e); } else { trace!("key_down '{}' (source {:?})", key, source); self.keys_down.insert(key.to_string()); }
+        } else {
+            trace!("key '{}' additional claim {:?} -> counts b:{} s:{}", key, source, entry.button, entry.stick);
+        }
+    }
+
+    /// Release a key (from a specific source), it'll only be released when all sources release it
+    fn release_key<Kb: KeyboardBackend>(&mut self, key: &str, source: KeySource, keyboard: &Kb) {
+        if key.is_empty() { return; }
+        if let Some(entry) = self.key_sources.get_mut(key) {
+            match source {
+                KeySource::Button => { if entry.button > 0 { entry.button -= 1; } else { return; } },
+                KeySource::Stick => { if entry.stick > 0 { entry.stick = 0; } else { return; } },
+            };
+            if entry.is_empty() {
+                // Last claimant -> send key_up
+                if self.keys_down.remove(key) {
+                    if let Err(e) = keyboard.key_up(key) { warn!("Failed to release key '{}': {}", key, e); } else { trace!("key_up '{}' (source {:?})", key, source); }
+                }
+                self.key_sources.remove(key);
+            } else {
+                trace!("key '{}' partial release {:?} -> counts b:{} s:{}", key, source, entry.button, entry.stick);
+            }
+        } else {
+            // Silent ignore to avoid startup spam
+        }
+    }
+
+    fn clear_all<Kb: KeyboardBackend>(&mut self, keyboard: &Kb) {
+        for key in self.keys_down.drain() {
+            if let Err(e) = keyboard.key_up(&key) { warn!("Failed to release key '{}': {}", key, e); }
+        }
+        self.key_sources.clear();
+        self.buttons.clear();
+    }
 }
 
 /// Gyro mouse state per controller
@@ -159,20 +234,32 @@ where
         }
     }
     
-    /// Update continuous stick movements (call this periodically in a timer)
+    /// Update continuous stick movements and held buttons (call this periodically in a timer)
     pub fn update_continuous_movements(&mut self) {
         // Apply movement for both sticks based on their current positions
         self.apply_stick_movement(StickType::Left);
         self.apply_stick_movement(StickType::Right);
+        
+        // Re-apply all held button actions to maintain continuous input
+        // This is needed because Joy-Con 2 stops sending button events when held
+        // and Windows needs repeated key_down calls for key repeat to work
+        // for button in self.held_state.buttons.clone() {
+        //     let side = Self::button_to_side(button);
+        //     if let Some(actions) = self.get_button_actions(button, side) {
+        //         for action in &actions {
+        //             // Only re-apply KeyHold actions (not one-time actions like CycleProfiles)
+        //             if matches!(action, Action::KeyHold { .. }) {
+        //                 self.execute_action(action, true, side);
+        //             }
+        //         }
+        //     }
+        // }
     }
     
     /// Handle button press
     fn on_button_pressed(&mut self, button: ButtonType) {
-        if self.held_state.buttons.contains(&button) {
-            return; // Already pressed
-        }
-        
-        self.held_state.buttons.insert(button);
+        // Track if button was already pressed (to avoid repeating one-time actions)
+        let was_already_pressed = !self.held_state.buttons.insert(button);
         
         // Determine which side this button is from
         let side = Self::button_to_side(button);
@@ -180,7 +267,31 @@ where
         // Get actions (with potential gyro mouse overrides)
         if let Some(actions) = self.get_button_actions(button, side) {
             for action in actions {
-                self.execute_action(&action, true, side);
+                // Only execute one-time actions on first press
+                // KeyHold actions are handled ONLY by update_continuous_movements()
+                match action {
+                    Action::CycleProfiles | 
+                    Action::CycleSensitivity |
+                    Action::ToggleGyroMouseL |
+                    Action::ToggleGyroMouseR => {
+                        if !was_already_pressed {
+                            self.execute_action(&action, true, side);
+                        }
+                    }
+                    Action::KeyHold { .. } => {
+                        // KeyHold actions are ONLY processed in update_continuous_movements()
+                        // This ensures proper keyboard repeat behavior (initial delay + repeat)
+                        // Do nothing here
+                        log::debug!("KeyHold action triggered: {:?}", action);
+                        if !was_already_pressed {
+                            self.execute_action(&action, true, side);
+                        }
+                    }
+                    _ => {
+                        // Execute other actions (MouseClick)
+                        self.execute_action(&action, true, side);
+                    }
+                }
             }
         }
     }
@@ -353,13 +464,14 @@ where
         self.previous_state = state.clone();
     }
     
-    /// Execute an action (press or release)
+    /// Execute an action (press or release), for keyhold, this will call held_state methods
     fn execute_action(&mut self, action: &Action, pressed: bool, _side: ControllerSide) {
         match action {
             Action::None { .. } => {
                 // Explicitly do nothing
             }
-            
+
+            // Key hold actions, call held_state methods
             Action::KeyHold { key } => {
                 // Skip if key is None or empty string
                 let Some(key_name) = key else {
@@ -372,43 +484,11 @@ where
                 }
                 
                 // Check if this is a multi-key combo (e.g., "shift+w")
-                if key_name.contains('+') {
-                    let keys: Vec<&str> = key_name.split('+').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
-                    
-                    if pressed {
-                        // Press all keys in order
-                        for k in &keys {
-                            if self.held_state.keys.insert(k.to_string()) {
-                                if let Err(e) = self.keyboard.key_down(k) {
-                                    warn!("Failed to hold key '{}': {}", k, e);
-                                }
-                            }
-                        }
-                    } else {
-                        // Release all keys in reverse order
-                        for k in keys.iter().rev() {
-                            if self.held_state.keys.remove(*k) {
-                                if let Err(e) = self.keyboard.key_up(k) {
-                                    warn!("Failed to release key '{}': {}", k, e);
-                                }
-                            }
-                        }
-                    }
+                let keys: Vec<&str> = key_name.split('+').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+                if pressed {
+                    for k in &keys { self.held_state.press_key(k, KeySource::Button, &self.keyboard); }
                 } else {
-                    // Single key
-                    if pressed {
-                        if self.held_state.keys.insert(key_name.clone()) {
-                            if let Err(e) = self.keyboard.key_down(key_name) {
-                                warn!("Failed to hold key '{}': {}", key_name, e);
-                            }
-                        }
-                    } else {
-                        if self.held_state.keys.remove(key_name) {
-                            if let Err(e) = self.keyboard.key_up(key_name) {
-                                warn!("Failed to release key '{}': {}", key_name, e);
-                            }
-                        }
-                    }
+                    for k in keys.iter().rev() { self.held_state.release_key(k, KeySource::Button, &self.keyboard); }
                 }
             }
             
@@ -533,57 +613,20 @@ where
         let should_press_right = x > threshold;
         
         // Press/release keys accordingly
-        self.set_key_state(&directions.up, should_press_up);
-        self.set_key_state(&directions.down, should_press_down);
-        self.set_key_state(&directions.left, should_press_left);
-        self.set_key_state(&directions.right, should_press_right);
+        self.set_stick_key_state(&directions.up, should_press_up);
+        self.set_stick_key_state(&directions.down, should_press_down);
+        self.set_stick_key_state(&directions.left, should_press_left);
+        self.set_stick_key_state(&directions.right, should_press_right);
     }
     
-    /// Set key state (press or release)
-    fn set_key_state(&mut self, key: &str, pressed: bool) {
-        // Skip empty keys
-        if key.is_empty() {
-            return;
-        }
-        
-        // Check if this is a multi-key combo (e.g., "shift+w")
-        if key.contains('+') {
-            let keys: Vec<&str> = key.split('+').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
-            
-            if pressed {
-                // Press all keys in order
-                for k in &keys {
-                    if self.held_state.keys.insert(k.to_string()) {
-                        if let Err(e) = self.keyboard.key_down(k) {
-                            warn!("Failed to press key '{}': {}", k, e);
-                        }
-                    }
-                }
-            } else {
-                // Release all keys in reverse order
-                for k in keys.iter().rev() {
-                    if self.held_state.keys.remove(*k) {
-                        if let Err(e) = self.keyboard.key_up(k) {
-                            warn!("Failed to release key '{}': {}", k, e);
-                        }
-                    }
-                }
-            }
+    /// Set key state for stick source (press or release). Ensures we don't release a key still held by a button.
+    fn set_stick_key_state(&mut self, key: &str, pressed: bool) {
+        if key.is_empty() { return; }
+        let keys: Vec<&str> = key.split('+').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+        if pressed {
+            for k in &keys { self.held_state.press_key(k, KeySource::Stick, &self.keyboard); }
         } else {
-            // Single key
-            if pressed {
-                if self.held_state.keys.insert(key.to_string()) {
-                    if let Err(e) = self.keyboard.key_down(key) {
-                        warn!("Failed to press key '{}': {}", key, e);
-                    }
-                }
-            } else {
-                if self.held_state.keys.remove(key) {
-                    if let Err(e) = self.keyboard.key_up(key) {
-                        warn!("Failed to release key '{}': {}", key, e);
-                    }
-                }
-            }
+            for k in keys.iter().rev() { self.held_state.release_key(k, KeySource::Stick, &self.keyboard); }
         }
     }
     
@@ -608,7 +651,7 @@ where
                     directions.right.clone(),
                 ];
                 for key in keys {
-                    self.set_key_state(&key, false);
+                    self.set_stick_key_state(&key, false);
                 }
             }
         }
@@ -621,12 +664,5 @@ where
     }
     
     /// Release all currently held keys (e.g., on disconnect or profile switch)
-    fn release_all_held_keys(&mut self) {
-        for key in self.held_state.keys.drain() {
-            if let Err(e) = self.keyboard.key_up(&key) {
-                warn!("Failed to release key '{}': {}", key, e);
-            }
-        }
-        self.held_state.buttons.clear();
-    }
+    fn release_all_held_keys(&mut self) { self.held_state.clear_all(&self.keyboard); }
 }

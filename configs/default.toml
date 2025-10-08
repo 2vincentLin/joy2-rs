@@ -30,9 +30,10 @@ description = "euro truck simulator 2"
 
 [profiles.buttons]
 A = [{ type = "keyhold", key = "enter" }] # confirm
-B = [{ type = "none", key = "" }]
+B = [{ type = "keyhold", key = "r" }] # audio radio
 X = [{ type = "keyhold", key = "t" }] # connect/disconnect trailer
-Y = [{ type = "none", key = "" }]
+Y = [{ type = "keyhold", key = "g" }] # garage manager
+
 
 L = [{ type = "keyhold", key = "[" }] # left indicator
 R =  [{ type = "keyhold", key = "]" }] # right indicator
@@ -57,7 +58,7 @@ SRL = [{ type = "keyhold", key = "2" }]
 SLR = [{ type = "cycleprofiles"}]
 SRR = [{ type = "togglegyromouser"}]
 
-Chat = [{ type = "none", key = "" }]
+Chat = [{ type = "keyhold", key = "alt+tab" }]
 
 [profiles.sticks.left]
 mode = "directional"
@@ -107,8 +108,8 @@ Y = [{ type = "keyhold", key = "y" }]
 
 L = [{ type = "keyhold", key = "l" }]
 R = [{ type = "keyhold", key = "r" }]
-ZL = [{ type = "keyhold", key = "" }]
-ZR = [{ type = "keyhold", key = "" }]
+ZL = [{ type = "keyhold", key = "s" }]
+ZR = [{ type = "keyhold", key = "x" }]
 
 DpadUp = [{ type = "keyhold", key = "up" }]
 DpadDown = [{ type = "keyhold", key = "down" }]

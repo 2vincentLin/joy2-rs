@@ -358,6 +358,7 @@ impl KeyboardSendInputBackend {
     /// This is idempotent: repeated calls are safe but unnecessary for Hold.
     pub fn key_down(name: &str) -> Result<(), String> {
         let key = Self::parse_allowed_key(name)?;
+        log::trace!("Key down: {:?} (scancode 0x{:X})", key, key.scancode());
         Self::key_down_scancode(key.scancode())
     }
 
@@ -365,6 +366,7 @@ impl KeyboardSendInputBackend {
     /// This is idempotent: repeated calls are safe but unnecessary for Hold.
     pub fn key_up(name: &str) -> Result<(), String> {
         let key = Self::parse_allowed_key(name)?;
+        log::trace!("Key up: {:?} (scancode 0x{:X})", key, key.scancode());
         Self::key_up_scancode(key.scancode())
     }
 
